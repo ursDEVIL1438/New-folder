@@ -13,7 +13,10 @@ import {
     GraduationCap, Home, Settings, Briefcase, Users, FileBarChart, Layers
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
+
 import { getAnalytics } from "firebase/analytics";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail } from "firebase/auth";
+import { getFirestore, doc, setDoc, getDoc, updateDoc } from "firebase/firestore";
 
 /* -------------------------------------------------------------------------- */
 /*                                FIREBASE CONFIG                             */
@@ -30,8 +33,11 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
 /* -------------------------------------------------------------------------- */
 /*                                CONSTANTS & DATA                            */
@@ -208,12 +214,28 @@ export default function CampusSync() {
     const [currentPage, setCurrentPage] = useState('home');
     const [currentUser, setCurrentUser] = useState(null); // { name, email, role, ... }
 
-    // Global State for Users (to allow new signups)
-    const [users, setUsers] = useState({
-        students: INITIAL_STUDENTS,
-        faculty: INITIAL_FACULTY,
-        admins: INITIAL_ADMINS
-    });
+    // Auth Listener
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                // User is signed in, fetch profile
+                try {
+                    const docRef = doc(db, "users", user.uid);
+                    const docSnap = await getDoc(docRef);
+                    if (docSnap.exists()) {
+                        const userData = docSnap.data();
+                        setCurrentUser({ ...userData, id: user.uid, email: user.email });
+                    }
+                } catch (error) {
+                    console.error("Error fetching user:", error);
+                }
+            } else {
+                setCurrentUser(null);
+            }
+        });
+        return () => unsubscribe();
+    }, []);
+
     const [sidebarOpen, setSidebarOpen] = useState(true);
 
     // Dashboard internal state
@@ -247,54 +269,81 @@ export default function CampusSync() {
     }, []);
 
     // --- Handlers ---
-    const handleLogin = (role, email, password) => {
-        // Simulating login with validation
-        let user;
-        if (role === 'student') user = users.students.find(u => u.email === email && u.password === password);
-        else if (role === 'faculty') user = users.faculty.find(u => u.email === email && u.password === password);
-        else if (role === 'admin') user = users.admins.find(u => u.email === email && u.password === password);
+    const handleLogin = async (role, email, password) => {
+        try {
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            // 1. Fetch User Data
+            const docRef = doc(db, "users", userCredential.user.uid);
+            const docSnap = await getDoc(docRef);
 
-        // For demo purposes, if no specific user matches but using demo creds (handled in LoginPage or just fallback)
-        // We'll trust the passed user object if it's already fully formed (from Signup) or finding it.
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                // Role validation (optional but good for UX)
+                if (data.role !== role && role !== 'admin') {
+                    addToast('warning', 'Role Mismatch', `Note: You are registered as a ${data.role}.`);
+                }
 
-        if (user) {
-            const userWithRole = { ...user, role };
-            setCurrentUser(userWithRole);
-            setCurrentPage(`${role}-dashboard`);
-            setDashboardTab('home');
-            addToast('success', 'Welcome back!', `Logged in as ${user.name}`);
-        } else {
-            addToast('error', 'Login Failed', 'Invalid email or password.');
-            return false;
+                setCurrentPage(`${data.role}-dashboard`);
+                setDashboardTab('home');
+                addToast('success', 'Welcome back!', `Logged in as ${data.name}`);
+            } else {
+                // Fallback: Auth successful but no profile? Should not happen if signup works.
+                console.error("No user profile found in Firestore");
+                setCurrentPage(`${role}-dashboard`);
+            }
+        } catch (error) {
+            console.error("Login Result:", error);
+            let msg = "Invalid email or password.";
+            if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+                msg = "Invalid email or password.";
+            }
+            addToast('error', 'Login Failed', msg);
         }
-        return true;
     };
 
-    const handleSignup = (role, formData) => {
-        // Check for existing email across all roles to be safe
-        const allUsers = [...users.students, ...users.faculty, ...users.admins];
-        if (allUsers.some(u => u.email === formData.email)) {
-            addToast('error', 'Signup Failed', 'Email already registered.');
-            return;
+    const handleSignup = async (role, formData) => {
+        try {
+            // 1. Create Auth User
+            const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+            const user = userCredential.user;
+
+            // 2. Prepare User Data
+            const userData = {
+                name: formData.name,
+                role: role,
+                dept: formData.dept,
+                email: formData.email,
+                active: true,
+                createdAt: new Date().toISOString()
+            };
+            // Add student specific fields
+            if (role === 'student') {
+                userData.roll = formData.roll;
+                userData.year = 1;
+                userData.attendance = 0;
+                userData.gpa = 0.0;
+            }
+
+            // 3. Save to Firestore
+            await setDoc(doc(db, "users", user.uid), userData);
+
+            // 4. Update Profile Display Name
+            await updateProfile(user, { displayName: formData.name });
+
+            addToast('success', 'Account Created', 'You have been signed in.');
+
+            // 5. Redirect
+            setCurrentUser({ ...userData, id: user.uid });
+            setCurrentPage(`${role}-dashboard`);
+            setDashboardTab('home');
+
+        } catch (error) {
+            console.error(error);
+            let msg = "Could not create account.";
+            if (error.code === 'auth/email-already-in-use') msg = "Email already registered.";
+            if (error.code === 'auth/weak-password') msg = "Password should be at least 6 characters.";
+            addToast('error', 'Signup Failed', msg);
         }
-
-        const newUser = {
-            id: `${role.charAt(0).toUpperCase()}${Date.now()}`,
-            ...formData,
-            // Add default stats for new users so dashboard doesn't crash
-            attendance: 0,
-            gpa: 0,
-            year: 1
-        };
-
-        if (role === 'student') {
-            setUsers(prev => ({ ...prev, students: [...prev.students, newUser] }));
-        } else {
-            setUsers(prev => ({ ...prev, faculty: [...prev.faculty, newUser] }));
-        }
-
-        addToast('success', 'Account Created', 'You can now log in.');
-        setCurrentPage('login');
     };
 
     const handleUpdateProfile = (updatedUser) => {
@@ -316,10 +365,27 @@ export default function CampusSync() {
         addToast('success', 'Profile Updated', 'Your changes have been saved.');
     };
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
+        await signOut(auth);
         setCurrentUser(null);
         setCurrentPage('home');
         addToast('info', 'Logged Out', 'You have been successfully logged out.');
+    };
+
+    const handleForgotPassword = async (email) => {
+        if (!email) {
+            addToast('error', 'Error', 'Please enter your email address first in the login field.');
+            return;
+        }
+        try {
+            await sendPasswordResetEmail(auth, email);
+            addToast('success', 'Email Sent', 'Check your inbox for password reset instructions.');
+        } catch (error) {
+            console.error("Reset Password Error:", error);
+            let msg = "Could not send reset email.";
+            if (error.code === 'auth/user-not-found') msg = "No user found with this email.";
+            addToast('error', 'Failed', msg);
+        }
     };
 
     // --- Global Styles for keyframes handled via style tag mostly, except Tailwind ones ---
@@ -525,7 +591,9 @@ export default function CampusSync() {
                 {/* PAGE ROUTING */}
                 <main className="p-6 max-w-7xl mx-auto">
                     {currentPage === 'home' && <LandingPage onNavigate={setCurrentPage} onLoginRequest={() => setCurrentPage('login')} />}
-                    {currentPage === 'login' && <LoginPage onLogin={handleLogin} onSignupClick={() => setCurrentPage('signup')} onBack={() => setCurrentPage('home')} />}
+                    {currentPage === 'home' && <LandingPage onNavigate={setCurrentPage} onLoginRequest={() => setCurrentPage('login')} />}
+                    {currentPage === 'login' && <LoginPage onLogin={handleLogin} onSignupClick={() => setCurrentPage('signup')} onBack={() => setCurrentPage('home')} onForgotPassword={handleForgotPassword} />}
+                    {currentPage === 'signup' && <SignupPage onSignup={handleSignup} onBack={() => setCurrentPage('login')} />}
                     {currentPage === 'signup' && <SignupPage onSignup={handleSignup} onBack={() => setCurrentPage('login')} />}
                     {currentPage === 'features' && <FeaturesPage />}
                     {currentPage === 'about' && <AboutPage />}
@@ -650,7 +718,7 @@ const LandingPage = ({ onNavigate, onLoginRequest }) => {
 };
 
 // --- Login Page ---
-const LoginPage = ({ onLogin, onSignupClick, onBack }) => {
+const LoginPage = ({ onLogin, onSignupClick, onBack, onForgotPassword }) => {
     const [role, setRole] = useState('student');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -728,7 +796,7 @@ const LoginPage = ({ onLogin, onSignupClick, onBack }) => {
                             <input type="checkbox" className="w-4 h-4 rounded bg-slate-700 border-none text-cyan-500 focus:ring-offset-0" />
                             Remember me
                         </label>
-                        <a href="#" className="text-cyan-400 hover:underline">Forgot password?</a>
+                        <button type="button" onClick={() => onForgotPassword(email)} className="text-cyan-400 hover:underline">Forgot password?</button>
                     </div>
 
                     <button disabled={loading} className={`w-full py-3 rounded-xl font-bold text-white shadow-lg transition-all ${role === 'student' ? 'bg-gradient-to-r from-cyan-500 to-blue-500 shadow-cyan-500/25' :
