@@ -55,19 +55,10 @@ const COLORS = {
     slate950: '#020814',
 };
 
-// --- Mock Data: Users ---
-const INITIAL_STUDENTS = [
-    { id: 'S001', name: 'Rahul Sharma', email: 'rahul@campus.edu', password: 'password', roll: '22CS001', dept: 'Computer Science', year: 3, attendance: 87, gpa: 3.82 },
-    { id: 'S002', name: 'Priya Reddy', email: 'priya@campus.edu', password: 'password', roll: '22CS002', dept: 'Computer Science', year: 3, attendance: 92, gpa: 3.95 },
-];
-
-const INITIAL_FACULTY = [
-    { id: 'F001', name: 'Dr. C. Nadhamuni Reddy', email: 'nadhamuni@campus.edu', password: 'password', dept: 'Computer Science', active: true },
-];
-
-const INITIAL_ADMINS = [
-    { id: 'A001', name: 'Admin User', email: 'admin@campus.edu', password: 'password', role: 'Administrator' },
-];
+// --- User Data handled via Firestore ---
+const INITIAL_STUDENTS = []; // Deprecated
+const INITIAL_FACULTY = []; // Deprecated
+const INITIAL_ADMINS = []; // Deprecated
 
 // --- Mock Data: Notifications ---
 const NOTIFICATIONS = [
@@ -765,25 +756,30 @@ const KPI = ({ title, value, sub, icon, color }) => (
 const StudentDashboard = ({ tab, user, onUpdateProfile }) => {
     if (tab === 'profile') return <ProfilePage user={user} onSave={onUpdateProfile} />;
 
+    const attendance = user.attendance || 0;
+    const gpa = user.gpa || 0;
+
     if (tab === 'home') {
         return (
-            <div className="space-y-6 animate-fade-in">
-                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
-                    <div>
-                        <h1 className="text-2xl font-bold">Good Morning, Rahul ☀️</h1>
-                        <p className="text-slate-400">Here's your schedule for today.</p>
+            <div className="space-y-8 animate-fade-in">
+                {/* Welcome Banner */}
+                <div className="bg-gradient-to-r from-cyan-500 to-blue-600 rounded-3xl p-8 text-white relative overflow-hidden shadow-2xl">
+                    <div className="relative z-10">
+                        <h1 className="text-4xl font-bold mb-2">Welcome back, {user.name.split(' ')[0]}!</h1>
+                        <p className="opacity-90">You have 2 upcoming assignments this week. Keep it up!</p>
+                        <button className="mt-6 px-6 py-2 bg-white/20 backdrop-blur-md rounded-xl font-semibold hover:bg-white/30 transition">Check Schedule</button>
                     </div>
-                    <div className="flex gap-3">
-                        <button className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm hover:border-cyan-400 transition shadow-sm">Mark Attendance</button>
-                        <button className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-xl text-sm hover:border-cyan-400 transition shadow-sm">View Grades</button>
-                    </div>
+                    {/* Abstract Shapes */}
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+                    <div className="absolute bottom-0 left-20 w-40 h-40 bg-purple-500/20 rounded-full blur-2xl pointer-events-none"></div>
                 </div>
 
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <KPI title="Attendance" value="87%" sub="Above requirement" icon={<Calendar size={20} />} color="text-emerald-400" />
-                    <KPI title="CGPA" value="3.82" sub="Dean's List" icon={<Award size={20} />} color="text-purple-400" />
-                    <KPI title="Requests" value="2" sub="Pending Approval" icon={<FileText size={20} />} color="text-orange-400" />
-                    <KPI title="Notices" value="5" sub="3 Unread" icon={<Bell size={20} />} color="text-cyan-400" />
+                {/* KPIs */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <KPI title="Attendance" value={`${attendance}%`} sub="Overall" icon={<CheckCircle size={20} />} color="text-emerald-400" />
+                    <KPI title="CGPA" value={`${gpa}`} sub="Current Sem" icon={<Award size={20} />} color="text-cyan-400" />
+                    <KPI title="Assignments" value="12/15" sub="Submitted" icon={<FileText size={20} />} color="text-purple-400" />
+                    <KPI title="Library" value="2" sub="Books Due" icon={<BookOpen size={20} />} color="text-orange-400" />
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -959,9 +955,9 @@ const FacultyDashboard = ({ tab, user, onUpdateProfile }) => {
     return (
         <div className="animate-fade-in text-center p-20">
             <h1 className="text-3xl font-bold text-white mb-4">Faculty Portal</h1>
-            <p className="text-slate-400">Welcome, Dr. Reddy. Access your classes and student data from the sidebar.</p>
+            <p className="text-slate-400">Welcome, {user.name}. Access your classes and student data from the sidebar.</p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
-                <KPI title="Students" value="142" icon={<Users size={24} />} color="text-cyan-400" />
+                <KPI title="Students (Demo)" value="142" icon={<Users size={24} />} color="text-cyan-400" />
                 <KPI title="Today's Classes" value="3" icon={<Clock size={24} />} color="text-purple-400" />
                 <KPI title="Pending Approvals" value="7" icon={<FileText size={24} />} color="text-orange-400" />
             </div>
@@ -982,10 +978,10 @@ const AdminDashboard = ({ tab }) => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                <KPI title="Total Students" value="15,247" sub="↑ 12% vs last month" icon={<Users size={20} />} color="text-cyan-400" />
-                <KPI title="Total Faculty" value="843" sub="↑ 3% new hires" icon={<GraduationCap size={20} />} color="text-purple-400" />
-                <KPI title="Attendance" value="91.4%" sub="↑ 2.1% improvement" icon={<CheckCircle size={20} />} color="text-emerald-400" />
-                <KPI title="System Health" value="99.9%" sub="All systems operational" icon={<Layers size={20} />} color="text-green-400" />
+                <KPI title="Total Users" value="Loading..." sub="Verified Users" icon={<Users size={20} />} color="text-cyan-400" />
+                <KPI title="Active Faculty" value="Loading..." sub="Department Heads" icon={<GraduationCap size={20} />} color="text-purple-400" />
+                <KPI title="Avg Attendance" value="--.-%" sub="Calculating..." icon={<CheckCircle size={20} />} color="text-emerald-400" />
+                <KPI title="System Status" value="Online" sub="All systems operational" icon={<Layers size={20} />} color="text-green-400" />
             </div>
 
             <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 h-96 mb-8">
