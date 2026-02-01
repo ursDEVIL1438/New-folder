@@ -50,18 +50,17 @@ const COLORS = {
 };
 
 // --- Mock Data: Users ---
-const STUDENTS = [
-    { id: 'S001', name: 'Rahul Sharma', email: 'rahul@campus.edu', roll: '22CS001', dept: 'Computer Science', year: 3, attendance: 87, gpa: 3.82 },
-    { id: 'S002', name: 'Priya Reddy', email: 'priya@campus.edu', roll: '22CS002', dept: 'Computer Science', year: 3, attendance: 92, gpa: 3.95 },
-    // ... more students could be added
+const INITIAL_STUDENTS = [
+    { id: 'S001', name: 'Rahul Sharma', email: 'rahul@campus.edu', password: 'password', roll: '22CS001', dept: 'Computer Science', year: 3, attendance: 87, gpa: 3.82 },
+    { id: 'S002', name: 'Priya Reddy', email: 'priya@campus.edu', password: 'password', roll: '22CS002', dept: 'Computer Science', year: 3, attendance: 92, gpa: 3.95 },
 ];
 
-const FACULTY = [
-    { id: 'F001', name: 'Dr. C. Nadhamuni Reddy', email: 'nadhamuni@campus.edu', dept: 'Computer Science', active: true },
+const INITIAL_FACULTY = [
+    { id: 'F001', name: 'Dr. C. Nadhamuni Reddy', email: 'nadhamuni@campus.edu', password: 'password', dept: 'Computer Science', active: true },
 ];
 
-const ADMINS = [
-    { id: 'A001', name: 'Admin User', email: 'admin@campus.edu', role: 'Administrator' },
+const INITIAL_ADMINS = [
+    { id: 'A001', name: 'Admin User', email: 'admin@campus.edu', password: 'password', role: 'Administrator' },
 ];
 
 // --- Mock Data: Notifications ---
@@ -208,6 +207,13 @@ const Modal = ({ isOpen, title, content, onConfirm, onClose, type = 'default' })
 export default function CampusSync() {
     const [currentPage, setCurrentPage] = useState('home');
     const [currentUser, setCurrentUser] = useState(null); // { name, email, role, ... }
+
+    // Global State for Users (to allow new signups)
+    const [users, setUsers] = useState({
+        students: INITIAL_STUDENTS,
+        faculty: INITIAL_FACULTY,
+        admins: INITIAL_ADMINS
+    });
     const [sidebarOpen, setSidebarOpen] = useState(true);
 
     // Dashboard internal state
@@ -241,17 +247,73 @@ export default function CampusSync() {
     }, []);
 
     // --- Handlers ---
-    const handleLogin = (role) => {
-        // Simulating login
+    const handleLogin = (role, email, password) => {
+        // Simulating login with validation
         let user;
-        if (role === 'student') user = { ...STUDENTS[0], role: 'student' };
-        else if (role === 'faculty') user = { ...FACULTY[0], role: 'faculty' };
-        else user = { ...ADMINS[0], role: 'admin' };
+        if (role === 'student') user = users.students.find(u => u.email === email && u.password === password);
+        else if (role === 'faculty') user = users.faculty.find(u => u.email === email && u.password === password);
+        else if (role === 'admin') user = users.admins.find(u => u.email === email && u.password === password);
 
-        setCurrentUser(user);
-        setCurrentPage(`${role}-dashboard`);
-        setDashboardTab('home');
-        addToast('success', 'Welcome back!', `Logged in as ${user.name}`);
+        // For demo purposes, if no specific user matches but using demo creds (handled in LoginPage or just fallback)
+        // We'll trust the passed user object if it's already fully formed (from Signup) or finding it.
+
+        if (user) {
+            const userWithRole = { ...user, role };
+            setCurrentUser(userWithRole);
+            setCurrentPage(`${role}-dashboard`);
+            setDashboardTab('home');
+            addToast('success', 'Welcome back!', `Logged in as ${user.name}`);
+        } else {
+            addToast('error', 'Login Failed', 'Invalid email or password.');
+            return false;
+        }
+        return true;
+    };
+
+    const handleSignup = (role, formData) => {
+        // Check for existing email across all roles to be safe
+        const allUsers = [...users.students, ...users.faculty, ...users.admins];
+        if (allUsers.some(u => u.email === formData.email)) {
+            addToast('error', 'Signup Failed', 'Email already registered.');
+            return;
+        }
+
+        const newUser = {
+            id: `${role.charAt(0).toUpperCase()}${Date.now()}`,
+            ...formData,
+            // Add default stats for new users so dashboard doesn't crash
+            attendance: 0,
+            gpa: 0,
+            year: 1
+        };
+
+        if (role === 'student') {
+            setUsers(prev => ({ ...prev, students: [...prev.students, newUser] }));
+        } else {
+            setUsers(prev => ({ ...prev, faculty: [...prev.faculty, newUser] }));
+        }
+
+        addToast('success', 'Account Created', 'You can now log in.');
+        setCurrentPage('login');
+    };
+
+    const handleUpdateProfile = (updatedUser) => {
+        // Update local session
+        setCurrentUser(updatedUser);
+
+        // Update global state
+        if (updatedUser.role === 'student') {
+            setUsers(prev => ({
+                ...prev,
+                students: prev.students.map(u => u.id === updatedUser.id ? updatedUser : u)
+            }));
+        } else if (updatedUser.role === 'faculty') {
+            setUsers(prev => ({
+                ...prev,
+                faculty: prev.faculty.map(u => u.id === updatedUser.id ? updatedUser : u)
+            }));
+        }
+        addToast('success', 'Profile Updated', 'Your changes have been saved.');
     };
 
     const handleLogout = () => {
@@ -376,7 +438,7 @@ export default function CampusSync() {
                                     {currentUser.name.charAt(0)}
                                 </button>
                                 <div className="absolute right-0 top-full mt-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all transform origin-top-right scale-95 group-hover:scale-100 flex flex-col p-1">
-                                    <button className="flex items-center gap-2 px-4 py-2 hover:bg-slate-700 rounded-lg text-sm text-slate-300 hover:text-white transition text-left"><User size={16} /> Profile</button>
+                                    <button onClick={() => setDashboardTab('profile')} className="flex items-center gap-2 px-4 py-2 hover:bg-slate-700 rounded-lg text-sm text-slate-300 hover:text-white transition text-left"><User size={16} /> Profile</button>
                                     <button className="flex items-center gap-2 px-4 py-2 hover:bg-slate-700 rounded-lg text-sm text-slate-300 hover:text-white transition text-left"><Settings size={16} /> Settings</button>
                                     <div className="h-px bg-slate-700 my-1"></div>
                                     <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 hover:bg-red-500/10 rounded-lg text-sm text-red-400 hover:text-red-300 transition text-left"><LogOut size={16} /> Logout</button>
@@ -462,13 +524,14 @@ export default function CampusSync() {
 
                 {/* PAGE ROUTING */}
                 <main className="p-6 max-w-7xl mx-auto">
-                    {currentPage === 'home' && <LandingPage onNavigate={setCurrentPage} onLoginRequest={handleLogin} />}
-                    {currentPage === 'login' && <LoginPage onLogin={handleLogin} onBack={() => setCurrentPage('home')} />}
+                    {currentPage === 'home' && <LandingPage onNavigate={setCurrentPage} onLoginRequest={() => setCurrentPage('login')} />}
+                    {currentPage === 'login' && <LoginPage onLogin={handleLogin} onSignupClick={() => setCurrentPage('signup')} onBack={() => setCurrentPage('home')} />}
+                    {currentPage === 'signup' && <SignupPage onSignup={handleSignup} onBack={() => setCurrentPage('login')} />}
                     {currentPage === 'features' && <FeaturesPage />}
                     {currentPage === 'about' && <AboutPage />}
 
-                    {currentPage === 'student-dashboard' && <StudentDashboard tab={dashboardTab} />}
-                    {currentPage === 'faculty-dashboard' && <FacultyDashboard tab={dashboardTab} />}
+                    {currentPage === 'student-dashboard' && <StudentDashboard tab={dashboardTab} user={currentUser} onUpdateProfile={handleUpdateProfile} />}
+                    {currentPage === 'faculty-dashboard' && <FacultyDashboard tab={dashboardTab} user={currentUser} onUpdateProfile={handleUpdateProfile} />}
                     {currentPage === 'admin-dashboard' && <AdminDashboard tab={dashboardTab} />}
                 </main>
             </div>
@@ -587,8 +650,10 @@ const LandingPage = ({ onNavigate, onLoginRequest }) => {
 };
 
 // --- Login Page ---
-const LoginPage = ({ onLogin, onBack }) => {
+const LoginPage = ({ onLogin, onSignupClick, onBack }) => {
     const [role, setRole] = useState('student');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = (e) => {
@@ -596,8 +661,14 @@ const LoginPage = ({ onLogin, onBack }) => {
         setLoading(true);
         setTimeout(() => {
             setLoading(false);
-            onLogin(role);
-        }, 1500);
+            // hardcoded demo check for ease of access
+            if (email === '' || password === '') {
+                // Demo bypass if empty (optional, but better to enforce)
+                // Keeping existing demo behavior for "demo/demo123" if you want
+            }
+            // Logic handled in parent
+            onLogin(role, email || (role === 'admin' ? 'admin@campus.edu' : role === 'faculty' ? 'nadhamuni@campus.edu' : 'rahul@campus.edu'), password || 'password');
+        }, 1000);
     };
 
     return (
@@ -627,14 +698,28 @@ const LoginPage = ({ onLogin, onBack }) => {
                         <label className="text-xs font-semibold uppercase text-slate-400">Email Address</label>
                         <div className="relative group">
                             <Mail className="absolute left-3 top-3 text-slate-500 group-focus-within:text-cyan-400 transition" size={18} />
-                            <input type="email" required placeholder="name@campus.edu" className="w-full bg-slate-900/50 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-500 transition" />
+                            <input
+                                type="email"
+                                required // Made required
+                                placeholder={role === 'admin' ? 'admin@campus.edu' : 'name@campus.edu'}
+                                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-500 transition"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                            />
                         </div>
                     </div>
                     <div className="space-y-2">
                         <label className="text-xs font-semibold uppercase text-slate-400">Password</label>
                         <div className="relative group">
                             <Lock className="absolute left-3 top-3 text-slate-500 group-focus-within:text-cyan-400 transition" size={18} />
-                            <input type="password" required placeholder="••••••••" className="w-full bg-slate-900/50 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-500 transition" />
+                            <input
+                                type="password"
+                                required // Made required
+                                placeholder="••••••••"
+                                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-500 transition"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                            />
                         </div>
                     </div>
 
@@ -655,13 +740,116 @@ const LoginPage = ({ onLogin, onBack }) => {
                     </button>
                 </form>
 
-                <div className="mt-8 p-4 bg-slate-900/50 rounded-xl border border-dashed border-slate-700 text-sm text-center">
-                    <p className="text-slate-400 mb-2">Demo Credentials</p>
-                    <div className="flex justify-center gap-4 text-xs font-mono text-slate-300">
-                        <span>user: demo</span>
-                        <span>pass: demo123</span>
-                    </div>
+                <div className="mt-6 pt-6 border-t border-slate-700/50 text-center">
+                    <p className="text-slate-400 text-sm">
+                        Don't have an account?{' '}
+                        <button onClick={onSignupClick} className="text-cyan-400 font-bold hover:underline">
+                            Create Account
+                        </button>
+                    </p>
                 </div>
+            </div>
+        </div>
+    );
+};
+
+// --- Signup Page ---
+const SignupPage = ({ onSignup, onBack }) => {
+    const [role, setRole] = useState('student');
+    const [loading, setLoading] = useState(false);
+    const [formData, setFormData] = useState({
+        name: '',
+        email: '',
+        password: '',
+        confirmPassword: '',
+        dept: '',
+        roll: ''
+    });
+
+    const handleChange = (e) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if (formData.password !== formData.confirmPassword) {
+            alert("Passwords do not match!");
+            return;
+        }
+        setLoading(true);
+        setTimeout(() => {
+            setLoading(false);
+            onSignup(role, formData);
+        }, 1500);
+    };
+
+    return (
+        <div className="flex items-center justify-center min-h-[80vh] px-4 animate-fade-in my-10">
+            <div className="w-full max-w-lg bg-slate-800/90 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-700/50 p-8 relative">
+                <div className="flex items-center gap-4 mb-8">
+                    <button onClick={onBack} className="p-2 rounded-full hover:bg-slate-700 text-slate-400 hover:text-white transition">
+                        <ChevronLeft size={24} />
+                    </button>
+                    <h2 className="text-2xl font-bold text-white">Create Account</h2>
+                </div>
+
+                <div className="flex p-1 bg-slate-900/50 rounded-xl mb-6">
+                    {['student', 'faculty'].map(r => (
+                        <button key={r} onClick={() => setRole(r)} className={`flex-1 py-2 text-sm font-medium capitalize rounded-lg transition-colors ${role === r ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}>
+                            {r}
+                        </button>
+                    ))}
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-xs font-semibold uppercase text-slate-400">Full Name</label>
+                            <input name="name" required onChange={handleChange} className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:border-cyan-400 transition" placeholder="John Doe" />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-semibold uppercase text-slate-400">Department</label>
+                            <select name="dept" required onChange={handleChange} className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:border-cyan-400 transition text-slate-300">
+                                <option value="">Select Dept</option>
+                                <option value="Computer Science">Computer Science</option>
+                                <option value="Electronics">Electronics</option>
+                                <option value="Mechanical">Mechanical</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {role === 'student' && (
+                        <div className="space-y-2">
+                            <label className="text-xs font-semibold uppercase text-slate-400">Roll Number</label>
+                            <input name="roll" required onChange={handleChange} className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:border-cyan-400 transition" placeholder="22CSXXXX" />
+                        </div>
+                    )}
+
+                    <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase text-slate-400">Email Address</label>
+                        <input type="email" name="email" required onChange={handleChange} className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:border-cyan-400 transition" placeholder="name@campus.edu" />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-xs font-semibold uppercase text-slate-400">Password</label>
+                            <input type="password" name="password" required onChange={handleChange} className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:border-cyan-400 transition" placeholder="••••••••" />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-semibold uppercase text-slate-400">Confirm Password</label>
+                            <input type="password" name="confirmPassword" required onChange={handleChange} className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:border-cyan-400 transition" placeholder="••••••••" />
+                        </div>
+                    </div>
+
+                    <button disabled={loading} className="w-full mt-6 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-cyan-500 to-emerald-500 shadow-lg shadow-cyan-500/20 hover:scale-[1.02] active:scale-95 transition-all flex justify-center items-center gap-2">
+                        {loading && <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>}
+                        {loading ? 'Creating Account...' : 'Create Account'}
+                    </button>
+
+                    <p className="text-xs text-center text-slate-500 mt-4">
+                        By signing up, you agree to our Terms of Service and Privacy Policy.
+                    </p>
+                </form>
             </div>
         </div>
     );
@@ -685,7 +873,9 @@ const KPI = ({ title, value, sub, icon, color }) => (
 );
 
 // --- Student Dashboard ---
-const StudentDashboard = ({ tab }) => {
+const StudentDashboard = ({ tab, user, onUpdateProfile }) => {
+    if (tab === 'profile') return <ProfilePage user={user} onSave={onUpdateProfile} />;
+
     if (tab === 'home') {
         return (
             <div className="space-y-6 animate-fade-in">
@@ -874,7 +1064,9 @@ const StudentDashboard = ({ tab }) => {
     return <div className="p-10 text-center text-slate-500">Section Under Construction</div>;
 };
 
-const FacultyDashboard = ({ tab }) => {
+const FacultyDashboard = ({ tab, user, onUpdateProfile }) => {
+    if (tab === 'profile') return <ProfilePage user={user} onSave={onUpdateProfile} />;
+
     return (
         <div className="animate-fade-in text-center p-20">
             <h1 className="text-3xl font-bold text-white mb-4">Faculty Portal</h1>
@@ -928,4 +1120,124 @@ const AdminDashboard = ({ tab }) => {
 // --- Features & About Placeholders ---
 const FeaturesPage = () => <div className="p-20 text-center"><h1 className="text-4xl font-bold text-white">Feature Showcase</h1><p className="mt-4 text-slate-400">Explore the powerful tools CampusSync offers.</p></div>;
 const AboutPage = () => <div className="p-20 text-center"><h1 className="text-4xl font-bold text-white">About CampusSync</h1><p className="mt-4 text-slate-400">Building the future of educational technology.</p></div>;
+
+// --- Profile Page ---
+const ProfilePage = ({ user, onSave }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [formData, setFormData] = useState({ ...user });
+
+    const handleChange = (e) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
+    };
+
+    const handleSave = () => {
+        onSave(formData);
+        setIsEditing(false);
+    };
+
+    return (
+        <div className="max-w-4xl mx-auto animate-fade-in">
+            <div className="bg-slate-800/60 backdrop-blur-md rounded-2xl border border-slate-700/50 overflow-hidden">
+                {/* Header Banner */}
+                <div className="h-48 bg-gradient-to-r from-cyan-500/20 to-purple-500/20 relative">
+                    <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1541339907198-e08756dedf3f?ixlib=rb-1.2.1&auto=format&fit=crop&w=1920&q=80')] opacity-20 bg-cover bg-center"></div>
+                    <button className="absolute top-4 right-4 p-2 bg-slate-900/50 backdrop-blur rounded-xl text-white hover:bg-slate-900 transition"><Edit size={18} /></button>
+                </div>
+
+                <div className="px-8 pb-8">
+                    <div className="relative -mt-16 mb-6 flex justify-between items-end">
+                        <div className="flex items-end gap-6">
+                            <div className="w-32 h-32 rounded-2xl bg-slate-900 p-1">
+                                <div className="w-full h-full rounded-xl bg-gradient-to-tr from-cyan-400 to-purple-500 flex items-center justify-center text-5xl font-bold text-white shadow-inner">
+                                    {user.name.charAt(0)}
+                                </div>
+                            </div>
+                            <div className="mb-2">
+                                <h1 className="text-3xl font-bold text-white">{user.name}</h1>
+                                <p className="text-slate-400 font-medium flex items-center gap-2">
+                                    {user.role === 'student' ? 'Student' : 'Faculty Member'} • {user.dept}
+                                    {user.active && <span className="inline-block w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>}
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => isEditing ? handleSave() : setIsEditing(true)}
+                            className={`px-6 py-2.5 rounded-xl font-bold transition shadow-lg flex items-center gap-2 ${isEditing ? 'bg-emerald-500 text-white shadow-emerald-500/20 hover:scale-105' : 'bg-slate-700 text-white hover:bg-slate-600'}`}
+                        >
+                            {isEditing ? <><Check size={18} /> Save Changes</> : <><Edit size={18} /> Edit Profile</>}
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-6">
+                            <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-700/50">
+                                <h3 className="font-bold text-white mb-4 flex items-center gap-2"><User size={18} className="text-cyan-400" /> Personal Details</h3>
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+                                        <span className="text-sm text-slate-500">Full Name</span>
+                                        {isEditing ?
+                                            <input name="name" value={formData.name} onChange={handleChange} className="bg-slate-800 border border-slate-600 rounded px-3 py-1 text-sm outline-none focus:border-cyan-400" />
+                                            : <span className="text-slate-200">{user.name}</span>
+                                        }
+                                    </div>
+                                    <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+                                        <span className="text-sm text-slate-500">Email</span>
+                                        {isEditing ?
+                                            <input name="email" value={formData.email} onChange={handleChange} className="bg-slate-800 border border-slate-600 rounded px-3 py-1 text-sm outline-none focus:border-cyan-400" />
+                                            : <span className="text-slate-200">{user.email}</span>
+                                        }
+                                    </div>
+                                    <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+                                        <span className="text-sm text-slate-500">Password</span>
+                                        {isEditing ?
+                                            <input name="password" type="text" value={formData.password} onChange={handleChange} className="bg-slate-800 border border-slate-600 rounded px-3 py-1 text-sm outline-none focus:border-cyan-400" />
+                                            : <span className="text-slate-200 font-mono">••••••••</span>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-6">
+                            <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-700/50">
+                                <h3 className="font-bold text-white mb-4 flex items-center gap-2"><GraduationCap size={18} className="text-purple-400" /> Academic Info</h3>
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+                                        <span className="text-sm text-slate-500">Department</span>
+                                        {isEditing ?
+                                            <select name="dept" value={formData.dept} onChange={handleChange} className="bg-slate-800 border border-slate-600 rounded px-3 py-1 text-sm outline-none focus:border-cyan-400">
+                                                <option>Computer Science</option>
+                                                <option>Electronics</option>
+                                                <option>Mechanical</option>
+                                            </select>
+                                            : <span className="text-slate-200">{user.dept}</span>
+                                        }
+                                    </div>
+                                    {user.roll && (
+                                        <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+                                            <span className="text-sm text-slate-500">Roll No</span>
+                                            <span className="text-slate-200">{user.roll}</span>
+                                        </div>
+                                    )}
+                                    {user.role === 'student' && (
+                                        <>
+                                            <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+                                                <span className="text-sm text-slate-500">Year</span>
+                                                <span className="text-slate-200">{user.year || 1}</span>
+                                            </div>
+                                            <div className="grid grid-cols-[100px_1fr] items-center gap-4">
+                                                <span className="text-sm text-slate-500">GPA</span>
+                                                <span className="text-emerald-400 font-bold">{user.gpa || 'N/A'}</span>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
