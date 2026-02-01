@@ -346,23 +346,19 @@ export default function CampusSync() {
         }
     };
 
-    const handleUpdateProfile = (updatedUser) => {
-        // Update local session
-        setCurrentUser(updatedUser);
-
-        // Update global state
-        if (updatedUser.role === 'student') {
-            setUsers(prev => ({
-                ...prev,
-                students: prev.students.map(u => u.id === updatedUser.id ? updatedUser : u)
-            }));
-        } else if (updatedUser.role === 'faculty') {
-            setUsers(prev => ({
-                ...prev,
-                faculty: prev.faculty.map(u => u.id === updatedUser.id ? updatedUser : u)
-            }));
+    const handleUpdateProfile = async (updatedUser) => {
+        try {
+            const userRef = doc(db, "users", updatedUser.id);
+            await updateDoc(userRef, {
+                name: updatedUser.name,
+                dept: updatedUser.dept,
+            });
+            setCurrentUser(updatedUser);
+            addToast('success', 'Profile Updated', 'Your changes have been saved.');
+        } catch (e) {
+            console.error(e);
+            addToast('error', 'Update Failed', 'Could not save changes.');
         }
-        addToast('success', 'Profile Updated', 'Your changes have been saved.');
     };
 
     const handleLogout = async () => {
@@ -727,16 +723,8 @@ const LoginPage = ({ onLogin, onSignupClick, onBack, onForgotPassword }) => {
     const handleSubmit = (e) => {
         e.preventDefault();
         setLoading(true);
-        setTimeout(() => {
-            setLoading(false);
-            // hardcoded demo check for ease of access
-            if (email === '' || password === '') {
-                // Demo bypass if empty (optional, but better to enforce)
-                // Keeping existing demo behavior for "demo/demo123" if you want
-            }
-            // Logic handled in parent
-            onLogin(role, email || (role === 'admin' ? 'admin@campus.edu' : role === 'faculty' ? 'nadhamuni@campus.edu' : 'rahul@campus.edu'), password || 'password');
-        }, 1000);
+        // Direct call to login handler
+        onLogin(role, email, password).finally(() => setLoading(false));
     };
 
     return (
