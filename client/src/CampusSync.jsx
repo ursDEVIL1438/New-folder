@@ -12,6 +12,26 @@ import {
     MoreVertical, Filter, Download, Plus, Trash2, Edit, ChevronDown, Award,
     GraduationCap, Home, Settings, Briefcase, Users, FileBarChart, Layers
 } from 'lucide-react';
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+
+/* -------------------------------------------------------------------------- */
+/*                                FIREBASE CONFIG                             */
+/* -------------------------------------------------------------------------- */
+
+const firebaseConfig = {
+    apiKey: "AIzaSyDQRYluV_fvYl6AYm99hRlqCrg9sN2pwiU",
+    authDomain: "travel-app-d53ed.firebaseapp.com",
+    projectId: "travel-app-d53ed",
+    storageBucket: "travel-app-d53ed.firebasestorage.app",
+    messagingSenderId: "977567743493",
+    appId: "1:977567743493:web:1223dbacd2f7997b40666c",
+    measurementId: "G-CE9ZFF3CGJ"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 
 /* -------------------------------------------------------------------------- */
 /*                                CONSTANTS & DATA                            */
@@ -253,12 +273,12 @@ export default function CampusSync() {
             <div className="fixed top-24 right-6 z-[100] flex flex-col gap-4 w-80 pointer-events-none">
                 {toasts.map(toast => (
                     <div key={toast.id} className={`pointer-events-auto bg-slate-800/90 backdrop-blur-md rounded-xl p-4 shadow-2xl border-l-[6px] flex gap-3 animate-slide-in relative overflow-hidden ${toast.type === 'success' ? 'border-emerald-500' :
-                            toast.type === 'error' ? 'border-red-500' :
-                                toast.type === 'warning' ? 'border-yellow-500' : 'border-cyan-500'
+                        toast.type === 'error' ? 'border-red-500' :
+                            toast.type === 'warning' ? 'border-yellow-500' : 'border-cyan-500'
                         }`}>
                         <div className={`${toast.type === 'success' ? 'text-emerald-400' :
-                                toast.type === 'error' ? 'text-red-400' :
-                                    toast.type === 'warning' ? 'text-yellow-400' : 'text-cyan-400'
+                            toast.type === 'error' ? 'text-red-400' :
+                                toast.type === 'warning' ? 'text-yellow-400' : 'text-cyan-400'
                             }`}>
                             {toast.type === 'success' ? <CheckCircle size={20} /> :
                                 toast.type === 'error' ? <XCircle size={20} /> :
@@ -627,8 +647,8 @@ const LoginPage = ({ onLogin, onBack }) => {
                     </div>
 
                     <button disabled={loading} className={`w-full py-3 rounded-xl font-bold text-white shadow-lg transition-all ${role === 'student' ? 'bg-gradient-to-r from-cyan-500 to-blue-500 shadow-cyan-500/25' :
-                            role === 'faculty' ? 'bg-gradient-to-r from-purple-500 to-pink-500 shadow-purple-500/25' :
-                                'bg-gradient-to-r from-orange-500 to-red-500 shadow-orange-500/25'
+                        role === 'faculty' ? 'bg-gradient-to-r from-purple-500 to-pink-500 shadow-purple-500/25' :
+                            'bg-gradient-to-r from-orange-500 to-red-500 shadow-orange-500/25'
                         } hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2`}>
                         {loading && <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>}
                         {loading ? 'Signing In...' : 'Sign In'}
