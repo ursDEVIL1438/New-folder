@@ -547,7 +547,6 @@ export default function CampusSync() {
                 )}
 
                 {/* PAGE ROUTING */}
-                {/* PAGE ROUTING */}
                 <main className="p-6 max-w-7xl mx-auto">
                     {currentPage === 'home' && <LandingPage onNavigate={setCurrentPage} onLoginRequest={() => setCurrentPage('login')} />}
                     {currentPage === 'login' && <LoginPage onLogin={handleLogin} onBack={() => setCurrentPage('home')} />}
