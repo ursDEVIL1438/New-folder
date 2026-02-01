@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AITS Smart Campus - Making Students Life Easier</title>
+
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .glass-card {
+            background: linear-gradient(120deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .neon-text {
+            text-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+        }
+
+        .gradient-text {
+            background: linear-gradient(to right, #6366f1, #a855f7, #ec4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Mock Data specifically designed for AITS context
+        const MOCK_USER = { name: 'Karthik Reddy', department: 'AI & Data Science', role: 'Student', year: 'III Year' };
+        const MOCK_ATTENDANCE = { percentage: 88, present: 42, total: 48 };
+        const MOCK_MARKS = [
+            { id: 1, subject: 'Deep Learning', exam: 'Internal 1', score: 24, max: 25 },
+            { id: 2, subject: 'Natural Language Processing', exam: 'Internal 1', score: 21, max: 25 },
+            { id: 3, subject: 'Big Data Analytics', exam: 'Assignment', score: 10, max: 10 },
+        ];
+        const MOCK_REQUESTS = [
+            { id: 1, type: 'OD', desc: 'Code Drift Hackathon', status: 'Approved', date: '2026-02-01' },
+            { id: 2, type: 'Certificate', desc: 'Bonafide Request', status: 'Pending', date: '2026-01-28' },
+        ];
+
+        const Icon = ({ name, size = 24, className }) => {
+            useEffect(() => {
+                lucide.createIcons();
+            }, [name]);
+            return <i data-lucide={name} className={className} style={{ width: size, height: size }}></i>;
+        };
+
+        const StatCard = ({ title, value, icon, color, trend }) => {
+            const gradients = {
+                primary: 'from-blue-500/20 to-indigo-500/20 text-blue-400',
+                secondary: 'from-purple-500/20 to-pink-500/20 text-purple-400',
+                green: 'from-emerald-500/20 to-green-500/20 text-emerald-400',
+                orange: 'from-orange-500/20 to-amber-500/20 text-orange-400',
+            };
+
+            return (
+                <div className={`glass rounded-2xl p-6 relative overflow-hidden group hover:scale-[1.02] transition-transform duration-300`}>
+                    <div className={`absolute -right-6 -top-6 w-24 h-24 bg-gradient-to-br ${gradients[color].split(' ')[0]} rounded-full blur-2xl opacity-50`}></div>
+                    <div className="flex items-start justify-between relative z-10">
+                        <div>
+                            <p className="text-sm font-medium text-gray-400 mb-1">{title}</p>
+                            <h3 className="text-3xl font-bold text-white">{value}</h3>
+                            {trend && <p className="text-xs text-emerald-400 mt-2 flex items-center gap-1"><Icon name="trending-up" size={12} /> {trend}</p>}
+                        </div>
+                        <div className={`p-3 rounded-xl bg-white/5 border border-white/10 ${gradients[color].split(' ').pop()}`}>
+                            <Icon name={icon} />
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const SidebarItem = ({ icon, label, active, onClick }) => (
+            <button
+                onClick={onClick}
+                className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all duration-300 group
+                ${active
+                        ? 'bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 shadow-[0_0_15px_rgba(99,102,241,0.2)]'
+                        : 'text-gray-400 hover:bg-white/5 hover:text-white'
+                    }`}
+            >
+                <Icon name={icon} size={20} className={active ? 'text-indigo-400' : 'group-hover:text-indigo-400 transition-colors'} />
+                <span className="font-medium text-sm">{label}</span>
+                {active && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-400 shadow-[0_0_8px_rgba(99,102,241,0.8)]"></div>}
+            </button>
+        );
+
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const [showAIInsights, setShowAIInsights] = useState(false);
+
+            useEffect(() => {
+                lucide.createIcons();
+            }, [showAIInsights]);
+
+            return (
+                <div className="flex min-h-screen bg-[url('https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?q=80&w=2070&auto=format&fit=crop')] bg-cover bg-fixed">
+                    {/* Dark Overlay */}
+                    <div className="absolute inset-0 bg-[#0f172a]/95 backdrop-blur-sm z-0"></div>
+
+                    {/* Sidebar */}
+                    <aside className="w-72 glass border-r-0 fixed h-full z-10 hidden md:flex flex-col p-4">
+                        <div className="h-20 flex items-center gap-3 px-2 mb-6">
+                            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center p-1 shadow-lg shadow-indigo-500/20">
+                                {/* Placeholder for AITS Logo - Using text as fallback if image fails, but logic implies image from URL */}
+                                <img src="https://aits-tpt.edu.in/wp-content/uploads/2018/08/logo.png" className="w-full h-full object-contain" alt="AITS" />
+                            </div>
+                            <div>
+                                <h1 className="font-bold text-white text-lg leading-tight tracking-wide">AITS TIRUPATI</h1>
+                                <p className="text-[10px] text-indigo-300 font-semibold tracking-wider">SMART CAMPUS</p>
+                            </div>
+                        </div>
+
+                        <div className="px-3 mb-6">
+                            <div className="p-3 rounded-xl bg-gradient-to-r from-indigo-600/20 to-purple-600/20 border border-indigo-500/20">
+                                <p className="text-xs text-indigo-200 mb-1">Current Event</p>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></div>
+                                    <span className="text-sm font-bold text-white">CODE DRIFT 2026</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <nav className="space-y-2 flex-1">
+                            <SidebarItem icon="layout-dashboard" label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
+                            <SidebarItem icon="calendar-check" label="My Attendance" active={activeTab === 'attendance'} onClick={() => setActiveTab('attendance')} />
+                            <SidebarItem icon="bar-chart-3" label="Academic Performance" active={activeTab === 'marks'} onClick={() => setActiveTab('marks')} />
+                            <SidebarItem icon="file-signature" label="Requests & Grievances" active={activeTab === 'requests'} onClick={() => setActiveTab('requests')} />
+                        </nav>
+
+                        <div className="mt-auto pt-6 border-t border-white/5">
+                            <button className="flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all w-full group">
+                                <Icon name="log-out" size={20} className="group-hover:-translate-x-1 transition-transform" />
+                                <span className="font-medium text-sm">Sign Out</span>
+                            </button>
+                        </div>
+                    </aside>
+
+                    {/* Main Content */}
+                    <main className="flex-1 md:ml-72 p-8 relative z-10 overflow-y-auto">
+                        <header className="flex justify-between items-end mb-10">
+                            <div>
+                                <h2 className="text-sm font-medium text-indigo-400 mb-1">Student Portal</h2>
+                                <h1 className="text-4xl font-bold text-white tracking-tight">Welcome, <span className="gradient-text">{MOCK_USER.name}</span></h1>
+                                <p className="text-gray-400 mt-2 flex items-center gap-2">
+                                    <Icon name="code-2" size={16} className="text-pink-500" />
+                                    {MOCK_USER.department} • {MOCK_USER.year}
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <button
+                                    onClick={() => setShowAIInsights(!showAIInsights)}
+                                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-medium shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-all flex items-center gap-2"
+                                >
+                                    <Icon name="sparkles" size={16} />
+                                    AI Insights
+                                </button>
+                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 border border-white/20 flex items-center justify-center text-white font-bold text-lg shadow-xl">
+                                    KR
+                                </div>
+                            </div>
+                        </header>
+
+                        {/* AI Insight Popup Mockup */}
+                        {showAIInsights && (
+                            <div className="mb-8 p-4 rounded-2xl bg-gradient-to-r from-indigo-900/50 to-purple-900/50 border border-indigo-500/30 animate-pulse">
+                                <div className="flex items-start gap-3">
+                                    <div className="p-2 bg-indigo-500/20 rounded-lg">
+                                        <Icon name="bot" className="text-indigo-300" />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-indigo-200 font-bold text-sm mb-1">AI Performance Analysis</h4>
+                                        <p className="text-gray-300 text-sm">
+                                            Based on your recent marks in <span className="text-white font-medium">Deep Learning</span>, you are in the top <span className="text-emerald-400 font-bold">5%</span> of your class! Your attendance trend predicts <span className="text-white font-medium">92%</span> by semester end. Keep it up! 🚀
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Stats Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                            <StatCard title="Attendance" value={`${MOCK_ATTENDANCE.percentage}%`} icon="percent" color="primary" trend="+2.5%" />
+                            <StatCard title="CGPA" value="8.8" icon="award" color="green" trend="Top 10%" />
+                            <StatCard title="Assignments" value="12/12" icon="check-circle" color="secondary" />
+                            <StatCard title="Notices" value="3 New" icon="bell" color="orange" />
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* Attendance Visual */}
+                            <div className="glass rounded-3xl p-8 lg:col-span-1 flex flex-col items-center justify-center relative overflow-hidden">
+                                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 to-blue-500"></div>
+                                <h3 className="text-lg font-bold text-white mb-8 w-full flex items-center gap-2">
+                                    <Icon name="pie-chart" size={18} className="text-cyan-400" /> Attendance Status
+                                </h3>
+                                <div className="relative w-56 h-56 flex items-center justify-center">
+                                    {/* Concentric Circles styling */}
+                                    <div className="absolute inset-0 rounded-full border-[10px] border-white/5"></div>
+                                    <div className="absolute inset-0 rounded-full border-[10px] border-cyan-500/20 border-t-cyan-400 border-r-blue-500 transform -rotate-45" style={{ clipPath: 'circle(100%)' }}></div>
+
+                                    <div className="text-center">
+                                        <span className="text-5xl font-black text-white tracking-tighter">{MOCK_ATTENDANCE.percentage}%</span>
+                                        <p className="text-indigo-200 text-sm font-medium mt-1">Excellent</p>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4 w-full mt-8">
+                                    <div className="text-center p-3 rounded-xl bg-white/5">
+                                        <p className="text-xs text-gray-400">Total Classes</p>
+                                        <p className="text-xl font-bold text-white">{MOCK_ATTENDANCE.total}</p>
+                                    </div>
+                                    <div className="text-center p-3 rounded-xl bg-white/5">
+                                        <p className="text-xs text-gray-400">Attended</p>
+                                        <p className="text-xl font-bold text-white">{MOCK_ATTENDANCE.present}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Recent Marks */}
+                            <div className="glass rounded-3xl p-8 lg:col-span-2 relative overflow-hidden">
+                                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 to-pink-500"></div>
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                        <Icon name="book-open" size={18} className="text-purple-400" /> Recent Marks
+                                    </h3>
+                                    <button className="text-xs text-indigo-300 hover:text-white transition-colors">View All</button>
+                                </div>
+                                <div className="space-y-4">
+                                    {MOCK_MARKS.map((mark, i) => (
+                                        <div key={mark.id} className="p-4 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors flex items-center justify-between group">
+                                            <div className="flex items-center gap-4">
+                                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg
+                                                    ${i === 0 ? 'bg-orange-500/20 text-orange-400' :
+                                                        i === 1 ? 'bg-blue-500/20 text-blue-400' : 'bg-pink-500/20 text-pink-400'}
+                                                `}>
+                                                    {mark.subject.charAt(0)}
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-semibold text-white group-hover:text-indigo-300 transition-colors">{mark.subject}</h4>
+                                                    <p className="text-xs text-gray-400">{mark.exam}</p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-lg font-bold text-white">{mark.score}<span className="text-sm text-gray-500">/{mark.max}</span></p>
+                                                <div className="w-24 h-1.5 bg-gray-700 rounded-full mt-1 overflow-hidden">
+                                                    <div className={`h-full rounded-full ${mark.score / mark.max > 0.9 ? 'bg-emerald-500' : 'bg-yellow-500'}`} style={{ width: `${(mark.score / mark.max) * 100}%` }}></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Requests Section */}
+                        <div className="glass rounded-3xl p-8 mt-6 relative overflow-hidden">
+                            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-500"></div>
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                    <Icon name="file-text" size={18} className="text-emerald-400" /> Recent Requests
+                                </h3>
+                                <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold uppercase tracking-wider rounded-lg transition-colors shadow-lg shadow-indigo-500/20">
+                                    + New Request
+                                </button>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left text-white">
+                                    <thead>
+                                        <tr className="border-b border-white/10 text-xs text-gray-400 uppercase tracking-wider">
+                                            <th className="pb-4 pl-4">Type</th>
+                                            <th className="pb-4">Description</th>
+                                            <th className="pb-4">Date Submitted</th>
+                                            <th className="pb-4">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="text-sm">
+                                        {MOCK_REQUESTS.map(req => (
+                                            <tr key={req.id} className="border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
+                                                <td className="py-4 pl-4 font-medium text-indigo-200">{req.type}</td>
+                                                <td className="py-4 text-gray-300">{req.desc}</td>
+                                                <td className="py-4 text-gray-400">{req.date}</td>
+                                                <td className="py-4">
+                                                    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${req.status === 'Approved' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'}`}>
+                                                        {req.status}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+
+</html>
