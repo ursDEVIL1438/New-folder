@@ -15,7 +15,7 @@ import {
 import { initializeApp } from "firebase/app";
 
 import { getAnalytics } from "firebase/analytics";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail } from "firebase/auth";
+import { getAuth, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc, updateDoc } from "firebase/firestore";
 
 /* -------------------------------------------------------------------------- */
@@ -269,80 +269,56 @@ export default function CampusSync() {
     }, []);
 
     // --- Handlers ---
-    const handleLogin = async (role, email, password) => {
+    // --- Handlers ---
+    const handleLogin = async (role) => {
+        const provider = new GoogleAuthProvider();
         try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            // 1. Fetch User Data
-            const docRef = doc(db, "users", userCredential.user.uid);
+            const result = await signInWithPopup(auth, provider);
+            const user = result.user;
+
+            // Check if user exists
+            const docRef = doc(db, "users", user.uid);
             const docSnap = await getDoc(docRef);
 
             if (docSnap.exists()) {
+                // Existing User - Log in
                 const data = docSnap.data();
-                // Role validation (optional but good for UX)
                 if (data.role !== role && role !== 'admin') {
-                    addToast('warning', 'Role Mismatch', `Note: You are registered as a ${data.role}.`);
+                    addToast('info', 'Role Updated', `Switched to your registered role: ${data.role}`);
                 }
-
                 setCurrentPage(`${data.role}-dashboard`);
                 setDashboardTab('home');
                 addToast('success', 'Welcome back!', `Logged in as ${data.name}`);
             } else {
-                // Fallback: Auth successful but no profile? Should not happen if signup works.
-                console.error("No user profile found in Firestore");
+                // New User - Create Account
+                const userData = {
+                    name: user.displayName,
+                    email: user.email,
+                    role: role,
+                    dept: 'General', // Default, can be edited
+                    active: true,
+                    createdAt: new Date().toISOString(),
+                    photoURL: user.photoURL
+                };
+
+                if (role === 'student') {
+                    userData.roll = 'NEW' + Date.now().toString().slice(-4);
+                    userData.year = 1;
+                    userData.attendance = 0;
+                    userData.gpa = 0.0;
+                }
+
+                await setDoc(doc(db, "users", user.uid), userData);
+
+                setCurrentUser({ ...userData, id: user.uid });
                 setCurrentPage(`${role}-dashboard`);
+                setDashboardTab('home');
+                addToast('success', 'Account Created', 'Welcome to CampusSync!');
             }
-        } catch (error) {
-            console.error("Login Result:", error);
-            let msg = "Invalid email or password.";
-            if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-                msg = "Invalid email or password.";
-            }
-            addToast('error', 'Login Failed', msg);
-        }
-    };
-
-    const handleSignup = async (role, formData) => {
-        try {
-            // 1. Create Auth User
-            const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-            const user = userCredential.user;
-
-            // 2. Prepare User Data
-            const userData = {
-                name: formData.name,
-                role: role,
-                dept: formData.dept,
-                email: formData.email,
-                active: true,
-                createdAt: new Date().toISOString()
-            };
-            // Add student specific fields
-            if (role === 'student') {
-                userData.roll = formData.roll;
-                userData.year = 1;
-                userData.attendance = 0;
-                userData.gpa = 0.0;
-            }
-
-            // 3. Save to Firestore
-            await setDoc(doc(db, "users", user.uid), userData);
-
-            // 4. Update Profile Display Name
-            await updateProfile(user, { displayName: formData.name });
-
-            addToast('success', 'Account Created', 'You have been signed in.');
-
-            // 5. Redirect
-            setCurrentUser({ ...userData, id: user.uid });
-            setCurrentPage(`${role}-dashboard`);
-            setDashboardTab('home');
 
         } catch (error) {
-            console.error(error);
-            let msg = "Could not create account.";
-            if (error.code === 'auth/email-already-in-use') msg = "Email already registered.";
-            if (error.code === 'auth/weak-password') msg = "Password should be at least 6 characters.";
-            addToast('error', 'Signup Failed', msg);
+            console.error("Auth Error:", error);
+            addToast('error', 'Login Failed', error.message);
         }
     };
 
@@ -368,21 +344,7 @@ export default function CampusSync() {
         addToast('info', 'Logged Out', 'You have been successfully logged out.');
     };
 
-    const handleForgotPassword = async (email) => {
-        if (!email) {
-            addToast('error', 'Error', 'Please enter your email address first in the login field.');
-            return;
-        }
-        try {
-            await sendPasswordResetEmail(auth, email);
-            addToast('success', 'Email Sent', 'Check your inbox for password reset instructions.');
-        } catch (error) {
-            console.error("Reset Password Error:", error);
-            let msg = "Could not send reset email.";
-            if (error.code === 'auth/user-not-found') msg = "No user found with this email.";
-            addToast('error', 'Failed', msg);
-        }
-    };
+
 
     // --- Global Styles for keyframes handled via style tag mostly, except Tailwind ones ---
     // Tailwind handles animate-pulse, animate-spin, animate-ping.
@@ -585,12 +547,10 @@ export default function CampusSync() {
                 )}
 
                 {/* PAGE ROUTING */}
+                {/* PAGE ROUTING */}
                 <main className="p-6 max-w-7xl mx-auto">
                     {currentPage === 'home' && <LandingPage onNavigate={setCurrentPage} onLoginRequest={() => setCurrentPage('login')} />}
-                    {currentPage === 'home' && <LandingPage onNavigate={setCurrentPage} onLoginRequest={() => setCurrentPage('login')} />}
-                    {currentPage === 'login' && <LoginPage onLogin={handleLogin} onSignupClick={() => setCurrentPage('signup')} onBack={() => setCurrentPage('home')} onForgotPassword={handleForgotPassword} />}
-                    {currentPage === 'signup' && <SignupPage onSignup={handleSignup} onBack={() => setCurrentPage('login')} />}
-                    {currentPage === 'signup' && <SignupPage onSignup={handleSignup} onBack={() => setCurrentPage('login')} />}
+                    {currentPage === 'login' && <LoginPage onLogin={handleLogin} onBack={() => setCurrentPage('home')} />}
                     {currentPage === 'features' && <FeaturesPage />}
                     {currentPage === 'about' && <AboutPage />}
 
@@ -714,17 +674,14 @@ const LandingPage = ({ onNavigate, onLoginRequest }) => {
 };
 
 // --- Login Page ---
-const LoginPage = ({ onLogin, onSignupClick, onBack, onForgotPassword }) => {
+const LoginPage = ({ onLogin, onBack }) => {
     const [role, setRole] = useState('student');
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
 
-    const handleSubmit = (e) => {
-        e.preventDefault();
+    const handleGoogleLogin = async () => {
         setLoading(true);
-        // Direct call to login handler
-        onLogin(role, email, password).finally(() => setLoading(false));
+        await onLogin(role);
+        setLoading(false);
     };
 
     return (
@@ -740,6 +697,11 @@ const LoginPage = ({ onLogin, onSignupClick, onBack, onForgotPassword }) => {
                     <span className="font-bold text-xl text-white">CampusSync</span>
                 </div>
 
+                <div className="text-center mb-8">
+                    <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">Welcome Back</h2>
+                    <p className="text-slate-400 text-sm mt-2">Sign in to access your dashboard</p>
+                </div>
+
                 <div className="flex p-1 bg-slate-900/50 rounded-xl mb-8 relative">
                     <div className={`absolute top-1 bottom-1 w-[32%] bg-slate-700 rounded-lg shadow transition-all duration-300 ${role === 'student' ? 'left-1' : role === 'faculty' ? 'left-[34%]' : 'left-[67%]'}`}></div>
                     {['student', 'faculty', 'admin'].map(r => (
@@ -749,163 +711,31 @@ const LoginPage = ({ onLogin, onSignupClick, onBack, onForgotPassword }) => {
                     ))}
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="space-y-2">
-                        <label className="text-xs font-semibold uppercase text-slate-400">Email Address</label>
-                        <div className="relative group">
-                            <Mail className="absolute left-3 top-3 text-slate-500 group-focus-within:text-cyan-400 transition" size={18} />
-                            <input
-                                type="email"
-                                required // Made required
-                                placeholder={role === 'admin' ? 'admin@campus.edu' : 'name@campus.edu'}
-                                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-500 transition"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                            />
-                        </div>
-                    </div>
-                    <div className="space-y-2">
-                        <label className="text-xs font-semibold uppercase text-slate-400">Password</label>
-                        <div className="relative group">
-                            <Lock className="absolute left-3 top-3 text-slate-500 group-focus-within:text-cyan-400 transition" size={18} />
-                            <input
-                                type="password"
-                                required // Made required
-                                placeholder="••••••••"
-                                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-500 transition"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                            />
-                        </div>
-                    </div>
-
-                    <div className="flex justify-between items-center text-sm py-2">
-                        <label className="flex items-center gap-2 cursor-pointer text-slate-400 hover:text-white">
-                            <input type="checkbox" className="w-4 h-4 rounded bg-slate-700 border-none text-cyan-500 focus:ring-offset-0" />
-                            Remember me
-                        </label>
-                        <button type="button" onClick={() => onForgotPassword(email)} className="text-cyan-400 hover:underline">Forgot password?</button>
-                    </div>
-
-                    <button disabled={loading} className={`w-full py-3 rounded-xl font-bold text-white shadow-lg transition-all ${role === 'student' ? 'bg-gradient-to-r from-cyan-500 to-blue-500 shadow-cyan-500/25' :
-                        role === 'faculty' ? 'bg-gradient-to-r from-purple-500 to-pink-500 shadow-purple-500/25' :
-                            'bg-gradient-to-r from-orange-500 to-red-500 shadow-orange-500/25'
-                        } hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2`}>
-                        {loading && <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>}
-                        {loading ? 'Signing In...' : 'Sign In'}
-                    </button>
-                </form>
-
-                <div className="mt-6 pt-6 border-t border-slate-700/50 text-center">
-                    <p className="text-slate-400 text-sm">
-                        Don't have an account?{' '}
-                        <button onClick={onSignupClick} className="text-cyan-400 font-bold hover:underline">
-                            Create Account
-                        </button>
-                    </p>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// --- Signup Page ---
-const SignupPage = ({ onSignup, onBack }) => {
-    const [role, setRole] = useState('student');
-    const [loading, setLoading] = useState(false);
-    const [formData, setFormData] = useState({
-        name: '',
-        email: '',
-        password: '',
-        confirmPassword: '',
-        dept: '',
-        roll: ''
-    });
-
-    const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
-    };
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        if (formData.password !== formData.confirmPassword) {
-            alert("Passwords do not match!");
-            return;
-        }
-        setLoading(true);
-        setTimeout(() => {
-            setLoading(false);
-            onSignup(role, formData);
-        }, 1500);
-    };
-
-    return (
-        <div className="flex items-center justify-center min-h-[80vh] px-4 animate-fade-in my-10">
-            <div className="w-full max-w-lg bg-slate-800/90 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-700/50 p-8 relative">
-                <div className="flex items-center gap-4 mb-8">
-                    <button onClick={onBack} className="p-2 rounded-full hover:bg-slate-700 text-slate-400 hover:text-white transition">
-                        <ChevronLeft size={24} />
-                    </button>
-                    <h2 className="text-2xl font-bold text-white">Create Account</h2>
-                </div>
-
-                <div className="flex p-1 bg-slate-900/50 rounded-xl mb-6">
-                    {['student', 'faculty'].map(r => (
-                        <button key={r} onClick={() => setRole(r)} className={`flex-1 py-2 text-sm font-medium capitalize rounded-lg transition-colors ${role === r ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`}>
-                            {r}
-                        </button>
-                    ))}
-                </div>
-
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <label className="text-xs font-semibold uppercase text-slate-400">Full Name</label>
-                            <input name="name" required onChange={handleChange} className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:border-cyan-400 transition" placeholder="John Doe" />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-xs font-semibold uppercase text-slate-400">Department</label>
-                            <select name="dept" required onChange={handleChange} className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:border-cyan-400 transition text-slate-300">
-                                <option value="">Select Dept</option>
-                                <option value="Computer Science">Computer Science</option>
-                                <option value="Electronics">Electronics</option>
-                                <option value="Mechanical">Mechanical</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    {role === 'student' && (
-                        <div className="space-y-2">
-                            <label className="text-xs font-semibold uppercase text-slate-400">Roll Number</label>
-                            <input name="roll" required onChange={handleChange} className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:border-cyan-400 transition" placeholder="22CSXXXX" />
-                        </div>
+                <button
+                    onClick={handleGoogleLogin}
+                    disabled={loading}
+                    className="w-full py-4 rounded-xl font-bold text-white bg-white/10 hover:bg-white/20 border border-white/10 transition-all flex items-center justify-center gap-3 group"
+                >
+                    {loading ? (
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    ) : (
+                        <>
+                            <svg className="w-5 h-5" viewBox="0 0 24 24">
+                                <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                                <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                                <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                                <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                            </svg>
+                            <span>Continue with Google</span>
+                        </>
                     )}
+                </button>
 
-                    <div className="space-y-2">
-                        <label className="text-xs font-semibold uppercase text-slate-400">Email Address</label>
-                        <input type="email" name="email" required onChange={handleChange} className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:border-cyan-400 transition" placeholder="name@campus.edu" />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <label className="text-xs font-semibold uppercase text-slate-400">Password</label>
-                            <input type="password" name="password" required onChange={handleChange} className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:border-cyan-400 transition" placeholder="••••••••" />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-xs font-semibold uppercase text-slate-400">Confirm Password</label>
-                            <input type="password" name="confirmPassword" required onChange={handleChange} className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 outline-none focus:border-cyan-400 transition" placeholder="••••••••" />
-                        </div>
-                    </div>
-
-                    <button disabled={loading} className="w-full mt-6 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-cyan-500 to-emerald-500 shadow-lg shadow-cyan-500/20 hover:scale-[1.02] active:scale-95 transition-all flex justify-center items-center gap-2">
-                        {loading && <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>}
-                        {loading ? 'Creating Account...' : 'Create Account'}
-                    </button>
-
-                    <p className="text-xs text-center text-slate-500 mt-4">
-                        By signing up, you agree to our Terms of Service and Privacy Policy.
+                <div className="mt-8 text-center">
+                    <p className="text-xs text-slate-500">
+                        By continuing, you agree to our Terms of Service and Privacy Policy.
                     </p>
-                </form>
+                </div>
             </div>
         </div>
     );
