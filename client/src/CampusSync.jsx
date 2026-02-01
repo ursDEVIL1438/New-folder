@@ -879,8 +879,8 @@ const StudentDashboard = ({ tab, user, onUpdateProfile }) => {
                 </div>
 
                 {/* Grades Table */}
-                <div className="bg-slate-800/50 rounded-2xl border border-slate-700 overflow-hidden">
-                    <table className="w-full text-left border-collapse">
+                <div className="bg-slate-800/50 rounded-2xl border border-slate-700 overflow-hidden overflow-x-auto">
+                    <table className="w-full text-left border-collapse min-w-[600px]">
                         <thead>
                             <tr className="bg-slate-900/50 text-slate-400 text-xs uppercase tracking-wider">
                                 <th className="p-4">Subject</th>
@@ -1002,9 +1002,71 @@ const AdminDashboard = ({ tab }) => {
     );
 };
 
-// --- Features & About Placeholders ---
-const FeaturesPage = () => <div className="p-20 text-center"><h1 className="text-4xl font-bold text-white">Feature Showcase</h1><p className="mt-4 text-slate-400">Explore the powerful tools CampusSync offers.</p></div>;
-const AboutPage = () => <div className="p-20 text-center"><h1 className="text-4xl font-bold text-white">About CampusSync</h1><p className="mt-4 text-slate-400">Building the future of educational technology.</p></div>;
+// --- Features Page ---
+const FeaturesPage = () => {
+    const features = [
+        { title: "Real-Time Tracking", desc: "Monitor student attendance and location in real-time with granular precision.", icon: <Clock size={32} />, color: "text-cyan-400", bg: "bg-cyan-500/10" },
+        { title: "AI Analytics", desc: "Predictive modeling for student performance and retention rates.", icon: <FileBarChart size={32} />, color: "text-purple-400", bg: "bg-purple-500/10" },
+        { title: "Secure Data", desc: "Enterprise-grade encryption for all sensitive student and faculty records.", icon: <Lock size={32} />, color: "text-emerald-400", bg: "bg-emerald-500/10" },
+        { title: "Instant Notices", desc: "Push-notification style alerts for campus-wide announcements.", icon: <Bell size={32} />, color: "text-yellow-400", bg: "bg-yellow-500/10" },
+        { title: "Seamless Grading", desc: "Automated CGPA calculation and digital gradebook management.", icon: <Award size={32} />, color: "text-pink-400", bg: "bg-pink-500/10" },
+        { title: "Role-Based Access", desc: "Strict permission controls for Students, Faculty, and Admins.", icon: <User size={32} />, color: "text-blue-400", bg: "bg-blue-500/10" },
+    ];
+
+    return (
+        <div className="pt-10 pb-20 animate-fade-in relative z-10">
+            <div className="text-center max-w-3xl mx-auto mb-16">
+                <h1 className="text-4xl md:text-5xl font-bold text-white mb-6">Powerful Features for Modern Campuses</h1>
+                <p className="text-lg text-slate-400">Everything you need to manage your educational institution efficiently, all in one place.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto px-4">
+                {features.map((f, i) => (
+                    <div key={i} className="bg-slate-800/40 backdrop-blur-md p-8 rounded-3xl border border-slate-700/50 hover:border-cyan-500/30 transition-all hover:-translate-y-1 group">
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 ${f.bg} ${f.color} group-hover:scale-110 transition-transform`}>
+                            {f.icon}
+                        </div>
+                        <h3 className="text-xl font-bold text-white mb-3">{f.title}</h3>
+                        <p className="text-slate-400 leading-relaxed">{f.desc}</p>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// --- About Page ---
+const AboutPage = () => (
+    <div className="pt-10 pb-20 animate-fade-in relative z-10">
+        <div className="max-w-4xl mx-auto px-4 text-center">
+            <h1 className="text-4xl md:text-6xl font-bold text-white mb-8">Reimagining Education Management</h1>
+            <p className="text-xl text-slate-400 mb-12 leading-relaxed">
+                CampusSync was born from a simple idea: educational institutions should focus on
+                <span className="text-cyan-400 font-semibold"> teaching</span>, not paperwork.
+                We combine cutting-edge AI with intuitive design to create the world's most advanced campus operating system.
+            </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto px-4 mt-16">
+            <div className="bg-slate-800/30 p-8 rounded-3xl border border-slate-700/50 text-center">
+                <div className="text-4xl font-bold text-white mb-2">2026</div>
+                <p className="text-cyan-400 font-medium">Founded</p>
+            </div>
+            <div className="bg-slate-800/30 p-8 rounded-3xl border border-slate-700/50 text-center">
+                <div className="text-4xl font-bold text-white mb-2">10k+</div>
+                <p className="text-purple-400 font-medium">Students Managed</p>
+            </div>
+            <div className="bg-slate-800/30 p-8 rounded-3xl border border-slate-700/50 text-center">
+                <div className="text-4xl font-bold text-white mb-2">99.9%</div>
+                <p className="text-emerald-400 font-medium">System Uptime</p>
+            </div>
+        </div>
+
+        <div className="text-center mt-20">
+            <p className="text-slate-500 text-sm">Built with ❤️ for Code Drift Hackathon</p>
+        </div>
+    </div>
+);
 
 // --- Profile Page ---
 const ProfilePage = ({ user, onSave }) => {
