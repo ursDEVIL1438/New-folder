@@ -16,7 +16,7 @@ import { initializeApp } from "firebase/app";
 
 import { getAnalytics } from "firebase/analytics";
 import { getAuth, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { getFirestore, doc, setDoc, getDoc, updateDoc } from "firebase/firestore";
+import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, addDoc, onSnapshot, query, where, orderBy, deleteDoc } from "firebase/firestore";
 
 /* -------------------------------------------------------------------------- */
 /*                                FIREBASE CONFIG                             */
@@ -946,11 +946,197 @@ const StudentDashboard = ({ tab, user, onUpdateProfile }) => {
         );
     }
 
+    if (tab === 'notices') return <NoticesTab />;
+    if (tab === 'requests') return <RequestsTab user={user} />;
+
     return <div className="p-10 text-center text-slate-500">Section Under Construction</div>;
 };
 
+// --- Student Dashboard Components ---
+
+const NoticesTab = () => {
+    const [notices, setNotices] = useState([]);
+    const [filter, setFilter] = useState('All');
+    const [searchQuery, setSearchQuery] = useState('');
+
+    useEffect(() => {
+        const q = query(collection(db, "notices"), orderBy("date", "desc"));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            // If empty, fallback to some mock data for demo if needed, or better: auto-seed logic
+            // For now, let's assume if empty we show a "No notices" or seed some
+            if (data.length === 0) {
+                // Self-seeding for demo purposes if DB is empty
+                setNotices([
+                    { id: '1', title: 'Mid-Semester Exams Schedule', category: 'Academic', date: new Date().toISOString(), content: 'The mid-semester exams will commence from 25th Oct. Please check the detailed schedule on the notice board.', urgent: true },
+                    { id: '2', title: 'Campus Wi-Fi Maintenance', category: 'Admin', date: new Date(Date.now() - 86400000).toISOString(), content: 'Wi-Fi services will be down for maintenance on Saturday from 10 PM to 2 AM.', urgent: false },
+                    { id: '3', title: 'Hackathon Registration Open', category: 'Events', date: new Date(Date.now() - 172800000).toISOString(), content: 'Register for Code Drift 2026. Great prizes to be won!', urgent: false }
+                ]);
+            } else {
+                setNotices(data);
+            }
+        });
+        return () => unsubscribe();
+    }, []);
+
+    const filteredNotices = notices.filter(n => {
+        const matchesFilter = filter === 'All' || n.category === filter || (filter === 'Urgent' && n.urgent);
+        const matchesSearch = n.title.toLowerCase().includes(searchQuery.toLowerCase()) || n.content.toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesFilter && matchesSearch;
+    });
+
+    return (
+        <div className="space-y-6 animate-fade-in">
+            <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
+                <h2 className="text-2xl font-bold">Campus Notices</h2>
+                <div className="flex gap-2 bg-slate-800 p-1 rounded-lg">
+                    {['All', 'Academic', 'Events', 'Urgent'].map(f => (
+                        <button key={f} onClick={() => setFilter(f)} className={`px-4 py-2 rounded-lg text-sm font-medium transition ${filter === f ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/25' : 'text-slate-400 hover:text-white'}`}>
+                            {f}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            <div className="relative">
+                <Search className="absolute left-3 top-3 text-slate-500" size={20} />
+                <input
+                    type="text"
+                    placeholder="Search notices..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl py-3 pl-10 pr-4 text-white focus:border-cyan-500 outline-none transition"
+                />
+            </div>
+
+            <div className="space-y-4">
+                {filteredNotices.map((notice) => (
+                    <div key={notice.id} className={`bg-slate-800/50 rounded-2xl p-6 border transition hover:-translate-y-1 ${notice.urgent ? 'border-red-500/50 shadow-lg shadow-red-500/10' : 'border-slate-700'}`}>
+                        <div className="flex justify-between items-start mb-2">
+                            <div className="flex items-center gap-3">
+                                {notice.urgent && <span className="flex h-3 w-3 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span></span>}
+                                <span className={`text-xs font-bold px-2 py-1 rounded uppercase tracking-wider ${notice.category === 'Academic' ? 'bg-blue-500/10 text-blue-400' : notice.category === 'Events' ? 'bg-purple-500/10 text-purple-400' : 'bg-slate-700 text-slate-400'}`}>
+                                    {notice.category}
+                                </span>
+                                <span className="text-xs text-slate-500 flex items-center gap-1"><Clock size={12} /> {new Date(notice.date).toLocaleDateString()}</span>
+                            </div>
+                        </div>
+                        <h3 className="text-xl font-bold text-white mb-2">{notice.title}</h3>
+                        <p className="text-slate-300 leading-relaxed">{notice.content}</p>
+                    </div>
+                ))}
+                {filteredNotices.length === 0 && <div className="text-center py-20 text-slate-500">No notices found</div>}
+            </div>
+        </div>
+    );
+};
+
+const RequestsTab = ({ user }) => {
+    const [requests, setRequests] = useState([]);
+    const [showModal, setShowModal] = useState(false);
+    const [requestType, setRequestType] = useState('leave'); // leave, od, certificate
+    const [formData, setFormData] = useState({ reason: '', dates: '', description: '' });
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (!user?.id) return;
+        const q = query(collection(db, "requests"), where("userId", "==", user.id), orderBy("createdAt", "desc"));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            setRequests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        });
+        return () => unsubscribe();
+    }, [user]);
+
+    const handleSubmit = async () => {
+        setLoading(true);
+        try {
+            await addDoc(collection(db, "requests"), {
+                userId: user.id,
+                userName: user.name,
+                type: requestType,
+                ...formData,
+                status: 'Pending',
+                createdAt: new Date().toISOString()
+            });
+            setShowModal(false);
+            setFormData({ reason: '', dates: '', description: '' });
+        } catch (error) {
+            console.error(error);
+        }
+        setLoading(false);
+    };
+
+    return (
+        <div className="space-y-6 animate-fade-in">
+            <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold">My Requests</h2>
+                <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-xl font-bold text-white shadow-lg hover:shadow-cyan-500/25 hover:scale-105 transition">
+                    <Plus size={20} /> New Request
+                </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {requests.length === 0 ? (
+                    <div className="col-span-full text-center py-20 border-2 border-dashed border-slate-700 rounded-3xl">
+                        <FileText size={48} className="mx-auto text-slate-600 mb-4" />
+                        <h3 className="text-xl font-bold text-slate-400">No requests history</h3>
+                        <p className="text-slate-500">Submit a new request to get started</p>
+                    </div>
+                ) : (
+                    requests.map(req => (
+                        <div key={req.id} className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 hover:border-slate-600 transition group">
+                            <div className="flex justify-between items-start mb-4">
+                                <div className={`p-3 rounded-xl ${req.type === 'leave' ? 'bg-orange-500/10 text-orange-400' : req.type === 'od' ? 'bg-purple-500/10 text-purple-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                                    {req.type === 'leave' ? <Calendar size={24} /> : req.type === 'od' ? <Briefcase size={24} /> : <FileText size={24} />}
+                                </div>
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${req.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-400' : req.status === 'Rejected' ? 'bg-red-500/10 text-red-400' : 'bg-yellow-500/10 text-yellow-400'}`}>
+                                    {req.status}
+                                </span>
+                            </div>
+                            <h3 className="font-bold text-lg text-white capitalize mb-1">{req.type} Request</h3>
+                            <p className="text-slate-400 text-sm mb-4 line-clamp-2">{req.description || req.reason}</p>
+                            <div className="flex items-center justify-between text-xs text-slate-500 border-t border-slate-700/50 pt-4">
+                                <span>ID: {req.id.slice(0, 8)}</span>
+                                <span>{new Date(req.createdAt).toLocaleDateString()}</span>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+
+            <Modal
+                isOpen={showModal}
+                title="Submit New Request"
+                onClose={() => setShowModal(false)}
+                onConfirm={handleSubmit}
+                content={
+                    <div className="space-y-4">
+                        <div className="flex p-1 bg-slate-900 rounded-lg">
+                            {['leave', 'od', 'certificate'].map(t => (
+                                <button key={t} onClick={() => setRequestType(t)} className={`flex-1 py-2 text-sm font-medium rounded-md capitalize transition ${requestType === t ? 'bg-slate-700 text-white shadow' : 'text-slate-400 hover:text-white'}`}>
+                                    {t}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="space-y-3">
+                            <label className="text-sm text-slate-400">Date / Duration</label>
+                            <input type="text" className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none focus:border-cyan-500" placeholder="e.g. 25th Oct - 27th Oct" value={formData.dates} onChange={e => setFormData({ ...formData, dates: e.target.value })} />
+                        </div>
+                        <div className="space-y-3">
+                            <label className="text-sm text-slate-400">Reason / Description</label>
+                            <textarea className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white outline-none focus:border-cyan-500 h-24" placeholder="Detailed reason for request..." value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })}></textarea>
+                        </div>
+                    </div>
+                }
+            />
+        </div>
+    );
+};
+
 const FacultyDashboard = ({ tab, user, onUpdateProfile }) => {
-    if (tab === 'profile') return <ProfilePage user={user} onSave={onUpdateProfile} />;
+    if (tab === 'attendance') return <FacultyAttendance />;
+    if (tab === 'marks') return <FacultyMarks />;
+    if (tab === 'approvals') return <FacultyApprovals />;
 
     return (
         <div className="animate-fade-in text-center p-20">
@@ -959,48 +1145,262 @@ const FacultyDashboard = ({ tab, user, onUpdateProfile }) => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
                 <KPI title="Students (Demo)" value="142" icon={<Users size={24} />} color="text-cyan-400" />
                 <KPI title="Today's Classes" value="3" icon={<Clock size={24} />} color="text-purple-400" />
-                <KPI title="Pending Approvals" value="7" icon={<FileText size={24} />} color="text-orange-400" />
+                <KPI title="Pending Approvals" value="Loading..." sub="Check Approvals Tab" icon={<FileText size={24} />} color="text-orange-400" />
+            </div>
+        </div>
+    );
+};
+
+// --- Faculty Components ---
+
+const FacultyAttendance = () => {
+    const [students, setStudents] = useState([
+        { id: 1, name: "Rahul Sharma", roll: "CS21001", status: 'present' },
+        { id: 2, name: "Priya Patel", roll: "CS21002", status: 'present' },
+        { id: 3, name: "Amit Kumar", roll: "CS21003", status: 'absent' },
+        { id: 4, name: "Sneha Gupta", roll: "CS21004", status: 'present' },
+        { id: 5, name: "Vikram Singh", roll: "CS21005", status: 'present' },
+    ]);
+
+    const toggleStatus = (id) => {
+        setStudents(students.map(s => s.id === id ? { ...s, status: s.status === 'present' ? 'absent' : 'present' } : s));
+    };
+
+    return (
+        <div className="space-y-6 animate-fade-in">
+            <h2 className="text-2xl font-bold">Mark Attendance (Today)</h2>
+            <div className="bg-slate-800/50 rounded-2xl border border-slate-700 overflow-hidden">
+                <table className="w-full text-left border-collapse">
+                    <thead>
+                        <tr className="bg-slate-900/50 text-slate-400 text-xs uppercase tracking-wider">
+                            <th className="p-4">Roll No</th>
+                            <th className="p-4">Student Name</th>
+                            <th className="p-4">Status</th>
+                            <th className="p-4">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700/50">
+                        {students.map(s => (
+                            <tr key={s.id} className="hover:bg-slate-800/50 transition">
+                                <td className="p-4 font-mono text-slate-400">{s.roll}</td>
+                                <td className="p-4 font-medium text-white">{s.name}</td>
+                                <td className="p-4">
+                                    <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${s.status === 'present' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                                        {s.status}
+                                    </span>
+                                </td>
+                                <td className="p-4">
+                                    <button onClick={() => toggleStatus(s.id)} className={`p-2 rounded-lg transition ${s.status === 'present' ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30' : 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'}`}>
+                                        Mark {s.status === 'present' ? 'Absent' : 'Present'}
+                                    </button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            <div className="flex justify-end">
+                <button className="px-6 py-3 bg-cyan-500 hover:bg-cyan-600 text-white font-bold rounded-xl shadow-lg shadow-cyan-500/25 transition">Submit Attendance</button>
+            </div>
+        </div>
+    );
+};
+
+const FacultyMarks = () => {
+    return (
+        <div className="space-y-6 animate-fade-in">
+            <h2 className="text-2xl font-bold">Enter Marks</h2>
+            <p className="text-slate-400">Select a subject and enter marks for the mid-semester exams.</p>
+            <div className="bg-slate-800/50 rounded-2xl border border-slate-700 p-8 text-center">
+                <Award size={48} className="mx-auto text-slate-600 mb-4" />
+                <h3 className="text-lg font-bold text-white mb-2">Marks Entry Portal</h3>
+                <p className="text-slate-500 mb-6">This module is currently locked until Exam Cell approval.</p>
+                <button className="px-4 py-2 bg-slate-700 text-slate-300 rounded-lg cursor-not-allowed opacity-50">Locked</button>
+            </div>
+        </div>
+    );
+};
+
+const FacultyApprovals = () => {
+    const [requests, setRequests] = useState([]);
+
+    useEffect(() => {
+        const q = query(collection(db, "requests"), where("status", "==", "Pending"), orderBy("createdAt", "desc"));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            setRequests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        });
+        return () => unsubscribe();
+    }, []);
+
+    const handleAction = async (id, status) => {
+        try {
+            await updateDoc(doc(db, "requests", id), { status });
+        } catch (error) {
+            console.error("Error updating request:", error);
+        }
+    };
+
+    return (
+        <div className="space-y-6 animate-fade-in">
+            <h2 className="text-2xl font-bold">Pending Approvals</h2>
+            <div className="grid gap-4">
+                {requests.length === 0 ? (
+                    <div className="text-center py-20 text-slate-500">No pending requests</div>
+                ) : (
+                    requests.map(req => (
+                        <div key={req.id} className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 flex flex-col md:flex-row justify-between gap-4 items-start md:items-center">
+                            <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="font-bold text-white">{req.userName}</span>
+                                    <span className="text-xs text-slate-500 px-2 py-0.5 bg-slate-900 rounded-full border border-slate-700 uppercase">{req.type}</span>
+                                </div>
+                                <p className="text-slate-300 text-sm mb-1">{req.description || req.reason}</p>
+                                <p className="text-slate-500 text-xs">{req.createdAt}</p>
+                            </div>
+                            <div className="flex gap-3">
+                                <button onClick={() => handleAction(req.id, 'Rejected')} className="px-4 py-2 rounded-xl border border-red-500/50 text-red-400 hover:bg-red-500/10 transition text-sm font-semibold">Reject</button>
+                                <button onClick={() => handleAction(req.id, 'Approved')} className="px-4 py-2 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg shadow-emerald-500/20 transition text-sm font-bold">Approve</button>
+                            </div>
+                        </div>
+                    ))
+                )}
             </div>
         </div>
     );
 };
 
 const AdminDashboard = ({ tab }) => {
+    if (tab === 'users') return <AdminUsers />;
+    if (tab === 'analytics') return <AdminAnalytics />;
+    if (tab === 'reports') return <AdminReports />;
+
+    const [stats, setStats] = useState({ users: 0, faculty: 0 });
+
+    useEffect(() => {
+        const q = query(collection(db, "users"));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const users = snapshot.docs.length;
+            const faculty = snapshot.docs.filter(d => d.data().role === 'faculty').length;
+            setStats({ users, faculty });
+        });
+        return () => unsubscribe();
+    }, []);
+
     return (
         <div className="animate-fade-in">
             <div className="flex justify-between items-center mb-8">
                 <h1 className="text-3xl font-bold text-white">Admin Overview</h1>
-                <div className="flex gap-2 bg-slate-800 p-1 rounded-lg">
-                    {['7D', '30D', '3M', '1Y'].map(r => (
-                        <button key={r} className={`px-3 py-1 rounded text-xs font-semibold ${r === '30D' ? 'bg-cyan-500 text-white' : 'text-slate-400 hover:text-white'}`}>{r}</button>
-                    ))}
-                </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                <KPI title="Total Users" value="Loading..." sub="Verified Users" icon={<Users size={20} />} color="text-cyan-400" />
-                <KPI title="Active Faculty" value="Loading..." sub="Department Heads" icon={<GraduationCap size={20} />} color="text-purple-400" />
-                <KPI title="Avg Attendance" value="--.-%" sub="Calculating..." icon={<CheckCircle size={20} />} color="text-emerald-400" />
-                <KPI title="System Status" value="Online" sub="All systems operational" icon={<Layers size={20} />} color="text-green-400" />
+                <KPI title="Total Users" value={stats.users} sub="Registered" icon={<Users size={20} />} color="text-cyan-400" />
+                <KPI title="Faculty" value={stats.faculty} sub="Staff Members" icon={<GraduationCap size={20} />} color="text-purple-400" />
+                <KPI title="System Status" value="Online" sub="Operational" icon={<Layers size={20} />} color="text-green-400" />
+                <KPI title="Reports" value="Pending" sub="Monthly Gen." icon={<FileText size={20} />} color="text-orange-400" />
             </div>
 
-            <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 h-96 mb-8">
-                <h3 className="font-bold mb-6">Attendance Trends (Last 6 Months)</h3>
-                <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={ATTENDANCE_MONTHLY}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                        <XAxis dataKey="month" stroke="#94a3b8" />
-                        <YAxis stroke="#94a3b8" />
-                        <Tooltip cursor={{ fill: '#334155', opacity: 0.2 }} contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155' }} />
-                        <Legend />
-                        <Bar dataKey="present" name="Avg Present" fill="#34d399" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="absent" name="Avg Absent" fill="#f87171" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                </ResponsiveContainer>
+            <AdminAnalytics />
+        </div>
+    );
+};
+
+// --- Admin Components ---
+
+const AdminUsers = () => {
+    const [users, setUsers] = useState([]);
+    const [search, setSearch] = useState('');
+
+    useEffect(() => {
+        const q = query(collection(db, "users"));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            setUsers(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+        return () => unsubscribe();
+    }, []);
+
+    const handleDelete = async (id) => {
+        if (window.confirm("Are you sure you want to delete this user? This cannot be undone.")) {
+            await deleteDoc(doc(db, "users", id));
+        }
+    };
+
+    const filtered = users.filter(u => u.name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase()));
+
+    return (
+        <div className="space-y-6 animate-fade-in">
+            <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold">User Management</h2>
+                <div className="relative">
+                    <Search className="absolute left-3 top-2.5 text-slate-500" size={18} />
+                    <input className="bg-slate-800 border border-slate-700 rounded-xl py-2 pl-9 pr-4 text-white outline-none focus:border-cyan-500" placeholder="Search users..." value={search} onChange={e => setSearch(e.target.value)} />
+                </div>
+            </div>
+
+            <div className="bg-slate-800/50 rounded-2xl border border-slate-700 overflow-hidden">
+                <table className="w-full text-left border-collapse">
+                    <thead>
+                        <tr className="bg-slate-900/50 text-slate-400 text-xs uppercase tracking-wider">
+                            <th className="p-4">User</th>
+                            <th className="p-4">Role</th>
+                            <th className="p-4">Department</th>
+                            <th className="p-4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700/50">
+                        {filtered.map(u => (
+                            <tr key={u.id} className="hover:bg-slate-800/50 transition">
+                                <td className="p-4">
+                                    <div className="font-bold text-white">{u.name}</div>
+                                    <div className="text-xs text-slate-500">{u.email}</div>
+                                </td>
+                                <td className="p-4"><span className="capitalize px-2 py-1 rounded bg-slate-700 text-xs font-bold text-slate-300">{u.role}</span></td>
+                                <td className="p-4 text-slate-400">{u.dept}</td>
+                                <td className="p-4">
+                                    <button onClick={() => handleDelete(u.id)} className="p-2 hover:bg-red-500/20 text-slate-500 hover:text-red-400 rounded-lg transition"><Trash2 size={18} /></button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
         </div>
     );
 };
+
+const AdminAnalytics = () => (
+    <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 h-96 mb-8">
+        <h3 className="font-bold mb-6">Attendance Trends (Last 6 Months)</h3>
+        <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={ATTENDANCE_MONTHLY}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                <XAxis dataKey="month" stroke="#94a3b8" />
+                <YAxis stroke="#94a3b8" />
+                <Tooltip cursor={{ fill: '#334155', opacity: 0.2 }} contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155' }} />
+                <Legend />
+                <Bar dataKey="present" name="Avg Present" fill="#34d399" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="absent" name="Avg Absent" fill="#f87171" radius={[4, 4, 0, 0]} />
+            </BarChart>
+        </ResponsiveContainer>
+    </div>
+);
+
+const AdminReports = () => (
+    <div className="space-y-6 animate-fade-in">
+        <h2 className="text-2xl font-bold">System Reports</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
+                <h3 className="font-bold text-white mb-2">Monthly Attendance Report</h3>
+                <p className="text-slate-400 text-sm mb-4">Generate detailed attendance logs for all departments.</p>
+                <button className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition"><Download size={18} /> Download PDF</button>
+            </div>
+            <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
+                <h3 className="font-bold text-white mb-2">Academic Performance Report</h3>
+                <p className="text-slate-400 text-sm mb-4">Export student GPA and credit data for analysis.</p>
+                <button className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition"><FileBarChart size={18} /> Export CSV</button>
+            </div>
+        </div>
+    </div>
+);
 
 // --- Features Page ---
 const FeaturesPage = () => {
