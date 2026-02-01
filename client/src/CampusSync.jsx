@@ -318,7 +318,11 @@ export default function CampusSync() {
 
         } catch (error) {
             console.error("Auth Error:", error);
-            addToast('error', 'Login Failed', error.message);
+            let msg = error.message;
+            if (error.code === 'auth/unauthorized-domain') {
+                msg = `Domain not authorized: ${window.location.hostname}. Add this to Firebase Console.`;
+            }
+            addToast('error', 'Login Failed', msg);
         }
     };
 
